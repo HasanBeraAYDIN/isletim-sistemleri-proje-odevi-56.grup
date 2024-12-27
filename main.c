@@ -342,4 +342,33 @@ void execute_command(char *cmd) {
         }
     }
 }
+int main() {
+    char cmd[MAX_CMD_LEN];
+
+    struct sigaction sa;
+    sa.sa_handler = handle_sigchld;
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    sigaction(SIGCHLD, &sa, NULL);
+
+    while (1) {
+        if(promptSayi == 0){
+            printf("> ");
+            fflush(stdout);
+        }
+
+        if (fgets(cmd, MAX_CMD_LEN, stdin) == NULL) {
+            break;
+        }
+
+        cmd[strcspn(cmd, "\n")] = 0;
+
+        if (strcmp(cmd, "quit") == 0) {
+            quit_shell();
+        }
+
+        execute_command(cmd);
+    }
+
+    return 0;
+}
 
