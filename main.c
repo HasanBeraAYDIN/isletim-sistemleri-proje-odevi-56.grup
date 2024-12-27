@@ -75,3 +75,33 @@ void quit_shell() {
     }
     exit(0); // Kabuk programını sonlandır
 }
+// Prompt yazdırma fonksiyonu
+// Bu fonksiyon, kabuk arayüzünde kullanıcıya yeni bir komut girmesi için prompt yazdırır
+void print_prompt() {
+    if (background_process_count == 0) { // Eğer arka plan işlemi yoksa prompt yazdır
+        printf("> "); // Prompt karakterini yaz
+        fflush(stdout); // Çıktıyı hemen ekrana aktar
+        ++promptSayi; // Prompt sayaç değerini artır
+    }
+}
+
+
+// Giriş ve çıkış yönlendirmesini analiz eden yardımcı fonksiyon
+// Bu fonksiyon, bir komutun giriş ("<") ve çıkış (">") yönlendirmelerini işler
+// Eğer yönlendirme işaretleri bulunursa, ilgili dosya adlarını input_file ve output_file işaretçilerine kaydeder
+void handle_redirection(char *cmd, char **input_file, char **output_file) {
+    char *input_redirect = strstr(cmd, "<"); // Komutta giriş yönlendirmesini ara
+    char *output_redirect = strstr(cmd, ">"); // Komutta çıkış yönlendirmesini ara
+
+    if (input_redirect != NULL) { // Eğer giriş yönlendirmesi varsa
+        *input_redirect = '\0'; // '<' karakterini komuttan ayır
+        input_redirect++; // '<' işaretinden sonrasını al
+        *input_file = strtok(input_redirect, " "); // İlk boşlukta keserek dosya adını al
+    }
+
+    if (output_redirect != NULL) { // Eğer çıkış yönlendirmesi varsa
+        *output_redirect = '\0'; // '>' karakterini komuttan ayır
+        output_redirect++; // '>' işaretinden sonrasını al
+        *output_file = strtok(output_redirect, " "); // İlk boşlukta keserek dosya adını al
+    }
+}
