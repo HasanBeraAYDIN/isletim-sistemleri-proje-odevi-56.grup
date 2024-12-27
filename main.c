@@ -138,3 +138,74 @@ void execute_pipe_commands(char *commands[], int num_commands) {
             exit(1); // Programı sonlandır
         }
     }
+
+    // Komutları alt süreçlerde çalıştır
+    for (int i = 0; i < num_commands; i++) {
+        pid_t pid = fork(); // Yeni bir süreç oluştur
+        if (pid == -1) { // Fork başarısız olduysa
+            printf("Fork basarisiz oldu"); // Hata mesajı
+            exit(1); // Programı sonlandır
+        } else if (pid == 0) { // Çocuk süreci
+            // Giriş bağlantısını ayarla
+            if (i > 0) { // İlk komut dışındaki komutlar için
+                if (dup2(pipe_fds[(i - 1) * 2], STDIN_FILENO) == -1) { // Giriş borusunu bağla
+                    printf("dup2 giris basarisiz oldu"); // Hata mesajı
+                    exit(1); // Programı sonlandır
+                }
+            }
+            // Çıkış bağlantısını ayarla
+            if (i < num_commands - 1) { // Son komut dışındaki komutlar için
+                if (dup2(pipe_fds[i * 2 + 1], STDOUT_FILENO) == -1) { // Çıkış borusunu bağla
+                    printf("dup2 cikis basarisiz oldu"); // Hata mesajı
+                    exit(1); // Programı sonlandır
+                }
+            }
+
+            // Tüm boru dosya tanımlayıcılarını kapat
+            for (int j = 0; j < 2 * (num_commands - 1); j++) {
+                close(pipe_fds[j]);
+            }
+
+            // Komutun argümanlarını ayrıştır
+            char *args[MAX_ARGS];
+            char *token = strtok(commands[i], " "); // Komutu boşluklara göre böl
+            int arg_count = 0;
+
+            while (token != NULL) { // Tüm argümanları al
+                args[arg_count++] = token;
+                token = strtok(NULL, " ");
+            }
+            args[arg_count] = NULL; // Argümanların sonuna NULL ekle
+
+            // Eğer komut "increment" ise özel işlem
+            if (strncmp(args[0], "increment", 9) == 0) {
+                handle_increment(); // increment işlemini gerçekleştir
+                exit(0); // Çocuk süreci sonlandır
+            }
+
+            // Komutu çalıştır
+            if (execvp(args[0], args) == -1) { // Komut çalıştırma başarısız olduysa
+                printf("Exec basarisiz oldu"); // Hata mesajı
+                exit(1); // Programı sonlandır
+            }
+        }
+    }
+
+    // Ana süreçte tüm boru dosya tanımlayıcılarını kapat
+    for (int i = 0; i < 2 * (num_commands - 1); i++) {
+        close(pipe_fds[i]);
+    }
+
+    // Tüm çocuk süreçlerini bekle
+    for (int i = 0; i < num_commands; i++) {
+        wait(NULL); // Çocuk süreçlerin tamamlanmasını bekle
+    }
+
+    // stdout'u eski haline döndür
+    dup2(saved_stdout, STDOUT_FILENO);
+    close(saved_stdout);
+
+    // stdout'u temizle
+    fflush(stdout); // Çıkışı hemen aktar
+}
+
