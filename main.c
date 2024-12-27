@@ -105,3 +105,36 @@ void handle_redirection(char *cmd, char **input_file, char **output_file) {
         *output_file = strtok(output_redirect, " "); // İlk boşlukta keserek dosya adını al
     }
 }
+
+// "increment" komutunu işleyen fonksiyon
+// Borudan gelen bir tam sayıyı okur, değeri 1 artırır ve sonucu standart çıktıya yazdırır
+void handle_increment() {
+    char buffer[16]; // Okuma için bir tampon oluştur
+    int bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer) - 1); // Standart girişten veriyi oku
+
+    if (bytes_read <= 0) { // Okuma başarısız olduysa
+        printf("Borudan okuma basarisiz oldu veya giris bos."); // Hata mesajı yazdır
+        exit(1); // Programı hata koduyla sonlandır
+    }
+
+    buffer[bytes_read] = '\0'; // Tamponun sonuna null karakter ekle
+    int value = atoi(buffer); // Tampondaki değeri tam sayıya dönüştür
+    printf("%d\n", value + 1); // Değeri 1 artır ve sonucu yazdır
+    fflush(stdout); // Çıktıyı hemen ekrana aktar
+}
+
+
+// Komutları borularla çalıştırma fonksiyonu
+// Bu fonksiyon, verilen komutları bir dizi boru (pipe) kullanarak çalıştırır.
+// Her komut bir alt süreçte çalıştırılır ve borular ile diğer komutlara veri aktarılır.
+void execute_pipe_commands(char *commands[], int num_commands) {
+    int pipe_fds[2 * (num_commands - 1)]; // Gerekli boru dosya tanımlayıcılarını saklamak için bir dizi
+    int saved_stdout = dup(STDOUT_FILENO); // stdout'u kaydet, böylece fonksiyon sonunda eski haline döndürülebilir
+
+    // Borular oluştur
+    for (int i = 0; i < num_commands - 1; i++) {
+        if (pipe(pipe_fds + i * 2) == -1) { // Boruları oluştur
+            printf("Boru olusturma basarisiz oldu"); // Hata mesajı
+            exit(1); // Programı sonlandır
+        }
+    }
