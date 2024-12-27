@@ -209,3 +209,137 @@ void execute_pipe_commands(char *commands[], int num_commands) {
     fflush(stdout); // Çıkışı hemen aktar
 }
 
+// Noktalı virgül ile ayrılmış komutları çalıştırma fonksiyonu
+// Bu fonksiyon, birden fazla komutun noktalı virgül (;) ile ayrıldığı bir dizgeyi işler ve her bir komutu sırasıyla çalıştırır.
+void execute_sequential_commands(char *cmd) {
+    char *command = strtok(cmd, ";"); // İlk komutu al
+
+    // Tüm komutları sırayla işle
+    while (command != NULL) {
+        execute_command(command); // Her bir komutu çalıştır
+        command = strtok(NULL, ";"); // Bir sonraki komutu al
+    }
+}
+
+
+// Tek bir komut veya karmaşık bir komut dizisini işleyen ana fonksiyon
+void execute_command(char *cmd) {
+    char *input_file = NULL; // Giriş dosyası için değişken
+    char *output_file = NULL; // Çıkış dosyası için değişken
+
+    // Giriş ve çıkış yönlendirmelerini kontrol et
+    handle_redirection(cmd, &input_file, &output_file);
+
+    // "increment" komutunu kontrol et ve çalıştır
+    if (strncmp(cmd, "increment", 9) == 0) {
+        int saved_stdin = dup(STDIN_FILENO); // Standart girişin yedeğini al
+        if (input_file != NULL) {
+            int fd = open(input_file, O_RDONLY); // Giriş dosyasını aç
+            if (fd == -1) {
+                printf("%s giris dosyasi bulunamadi", input_file);
+                return;
+            }
+            if (dup2(fd, STDIN_FILENO) == -1) { // Standart girişi dosya ile değiştir
+                printf("dup2 basarisiz oldu");
+                close(fd);
+                return;
+            }
+            handle_increment(); // "increment" işlemini gerçekleştir
+            close(fd);
+        } else {
+            handle_increment(); // Giriş dosyası yoksa doğrudan çalıştır
+        }
+        dup2(saved_stdin, STDIN_FILENO); // Standart girişi eski haline döndür
+        close(saved_stdin);
+        return;
+    }
+
+    // Boru ile komutları kontrol et ve çalıştır
+    if (strchr(cmd, '|') != NULL) {
+        char *commands[MAX_PIPES];
+        int num_commands = 0;
+
+        char *command = strtok(cmd, "|"); // Komutları boruya göre ayır
+        while (command != NULL) {
+            commands[num_commands++] = command;
+            command = strtok(NULL, "|");
+        }
+        execute_pipe_commands(commands, num_commands); // Boru komutlarını çalıştır
+    }
+    // Noktalı virgül ile ayrılmış komutları kontrol et ve çalıştır
+    else if (strchr(cmd, ';') != NULL) {
+        execute_sequential_commands(cmd); // Sıralı komutları çalıştır
+    }
+    // Tek komut veya arka plan komutlarını kontrol et ve çalıştır
+    else {
+        int is_background = 0; // Arka plan işlemi olup olmadığını kontrol et
+        char *ampersand = strstr(cmd, "&");
+        if (ampersand != NULL) {
+            is_background = 1;
+            *ampersand = '\0'; // "&" karakterini kaldır
+        }
+
+        pid_t pid = fork(); // Yeni süreç oluştur
+        if (pid == -1) {
+            printf("Fork basarisiz oldu");
+            exit(1);
+        } 
+        // Çocuk süreç işlemleri
+        else if (pid == 0) {
+            if (input_file != NULL) {
+                int fd = open(input_file, O_RDONLY); // Giriş dosyasını aç
+                if (fd == -1) {
+                    printf("%s giris dosyasi bulunamadi", input_file);
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO); // Standart girişi dosya ile değiştir
+                close(fd);
+            }
+
+            if (output_file != NULL) {
+                int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644); // Çıkış dosyasını aç
+                if (fd == -1) {
+                    printf("Cikis dosyasi hatali");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO); // Standart çıkışı dosya ile değiştir
+                close(fd);
+            }
+
+            // Komutun argümanlarını ayrıştır ve çalıştır
+            char *args[MAX_CMD_LEN / 2 + 1];
+            int i = 0;
+            char *token = strtok(cmd, " ");
+            while (token != NULL) {
+                args[i] = token;
+                i++;
+                token = strtok(NULL, " ");
+            }
+            args[i] = NULL;
+
+            if (execvp(args[0], args) == -1) { // Komutu çalıştır
+                printf("Exec basarisiz oldu");
+                exit(1);
+            }
+        } 
+        // Ana süreç işlemleri
+        else {
+            if (is_background) {
+                // Arka plan işlemi ise listeye ekle
+                background_process_count++;
+                if (background_pids_count < MAX_BG_PROCESSES) {
+                    background_pids[background_pids_count++] = pid;
+                } else {
+                    printf("Hata: Cok fazla arka plan islemi.\n");
+                }
+            } else {
+                waitpid(pid, NULL, 0); // Ön plan işlemini bekle
+                if (strncmp(cmd, "cat", 3) == 0 && output_file == NULL) {
+                    printf("\n");
+                    fflush(stdout);
+                }
+            }
+        }
+    }
+}
+
